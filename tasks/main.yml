@@ -2,7 +2,16 @@
 # tasks file for metricbeat_install
 - name: Gather private IPs for all Elasticsearch
   set_fact:
-    elastic_nodes: "{{ groups['tag_app_elastic'] | map('extract', hostvars, 'ansible_default_ipv4') | selectattr('address', 'defined') | join(':9200') | map(attribute='address') | list }}"
+    elastic_nodes: >-
+      {{
+        groups['tag_app_elastic']
+        | map('extract', hostvars, 'ansible_default_ipv4')
+        | selectattr('address', 'defined')
+        | map(attribute='address')
+        | map('regex_replace', '^', 'http://')
+        | map('regex_replace', '$', ':9200')
+        | list
+      }}
   delegate_to: localhost
   run_once: true
 
@@ -21,12 +30,12 @@
 - name: Configure metricbeat
   ansible.builtin.lineinfile:
     path: "{{ item }}"
-    regexp: '^#?hosts:$'
-    line: "hosts: [{{ elastic_nodes | map('quote') | join(', ') }}]"
+    regexp: '^(.*)hosts:(.*)$'
+    line: '\1hosts: [{{ elastic_nodes | map("quote") | join(", ") }}]\2'
     backrefs: true
   with_items: 
   - /etc/metricbeat/metricbeat.yml
-  - /etc/metricbeat/modules.d/elasticsearch.yml
+  #- /etc/metricbeat/modules.d/elasticsearch.yml
   notify: restart metricbeat
 
 
