@@ -8,8 +8,8 @@
         | map('extract', hostvars, 'ansible_default_ipv4')
         | selectattr('address', 'defined')
         | map(attribute='address')
-        | map('regex_replace', '^', 'http://')
-        | map('regex_replace', '$', ':9200')
+        | map('regex_replace', '^', '"http://')
+        | map('regex_replace', '$', ':9200"')
         | list
       }}
   delegate_to: localhost
@@ -31,13 +31,9 @@
   ansible.builtin.lineinfile:
     path: "{{ item }}"
     regexp: '^(.*)hosts:(.*)$'
-    line: '\1hosts: [{{ elastic_nodes | map("quote") | join(", ") }}]\2'
+    line: '\1hosts: [{{ elastic_nodes | join(", ") }}]'
     backrefs: true
-  with_items: 
-  - /etc/metricbeat/metricbeat.yml
-  #- /etc/metricbeat/modules.d/elasticsearch.yml
+  with_items:
+    #- /etc/metricbeat/metricbeat.yml
+  - /etc/metricbeat/modules.d/elasticsearch.yml
   notify: restart metricbeat
-
-
-
-  
