@@ -1,0 +1,27 @@
+- name: Enable filebeat kibana parameter
+  ansible.builtin.replace:
+    path: /etc/filebeat/filebeat.yml
+    regexp: '^(.*)enabled:(.*)false(.*)$'
+    replace: '\1enabled: true'
+    #backrefs: true
+  notify: restart filebeat
+
+- name: Enable modules
+  ansible.builtin.shell: "filebeat modules enable"
+  loop: "{{filebeat_modules}}"
+  register: __filebeat_module_item_enable
+  changed_when: __filebeat_module_item_enable.stdout == "Enabled {{ item }}"
+  notify: restart filebeat
+
+- name: Enable system module
+  ansible.builtin.shell: "filebeat modules enable system"
+  register: __filebeat_module_system_enable
+  changed_when: __filebeat_module_system_enable.stdout == 'Enabled system'
+  notify: restart filebeat
+
+# - name: Enable system module
+#   ansible.builtin.shell: "filebeat setup"
+#   register: __filebeat_module_system_enable
+#   #changed_when: __filebeat_module_system_enable.output == 'Enabled system'
+#   notify: restart filebeat
+#   ignore_errors: true

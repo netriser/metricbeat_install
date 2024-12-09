@@ -1,0 +1,26 @@
+- name: Enable enable elasticsearch-xpack module on elastic nodes
+  ansible.builtin.shell: "metricbeat modules enable elasticsearch-xpack"
+  register: __metricbeat_module_elasticsearch_xpack_enable
+  changed_when: __metricbeat_module_elasticsearch_xpack_enable.stdout == 'Enabled elasticsearch-xpack'
+  notify: restart metricbeat
+  when: "'es-' in ansible_hostname"
+
+- name: Enable modules
+  ansible.builtin.shell: "metricbeat modules enable {{ item }}"
+  loop: "{{metricbeat_modules}}"
+  register: __metricbeat_module_item_enable
+  changed_when: __metricbeat_module_item_enable.stdout == "Enabled {{ item }}"
+  notify: restart metricbeat
+
+- name: Enable system module
+  ansible.builtin.shell: "metricbeat modules enable system"
+  register: __metricbeat_module_system_enable
+  changed_when: __metricbeat_module_system_enable.stdout == 'Enabled system'
+  notify: restart metricbeat
+
+# - name: Enable system module
+#   ansible.builtin.shell: "metricbeat setup"
+#   register: __metricbeat_module_system_enable
+#   #changed_when: __metricbeat_module_system_enable.output == 'Enabled system'
+#   notify: restart metricbeat
+#   ignore_errors: true

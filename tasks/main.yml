@@ -1,24 +1,32 @@
 ---
 # tasks file for metricbeat_install
-- name: shell tag_app_elastic
+- name: Get es IPs using aws command tag_app_elastic
   shell: aws ec2 describe-instances --filters "Name=tag:app,Values=elastic" --query "Reservations[*].Instances[*].PrivateIpAddress" --output text
-  register: shelloutput
+  register: __elastic_ips_list
   delegate_to: localhost
   become_user: ubuntu
   run_once: true
-  changed_when: shelloutput.rc != 0
+  changed_when: __elastic_ips_list.rc != 0
 
 - name: Gather private IPs for all Elasticsearch
   set_fact:
     elastic_nodes: >-
       {{
-        shelloutput.stdout_lines
+        __elastic_ips_list.stdout_lines
         | map('regex_replace', '^', '"http://')
         | map('regex_replace', '$', ':9200"')
         | list
       }}
   delegate_to: localhost
   run_once: true
+
+- name: Get es IPs using aws command tag_app_kibana
+  shell: aws ec2 describe-instances --filters "Name=tag:app,Values=kibana" --query "Reservations[*].Instances[*].PrivateIpAddress" --output text
+  register: __kibana_ips_list
+  delegate_to: localhost
+  become_user: ubuntu
+  run_once: true
+  changed_when: __kibana_ips_list.rc != 0
 
 # - name: Gather private IPs for all Elasticsearch
 #   set_fact:
@@ -37,20 +45,50 @@
 
 - name: Install metricbeat packages
   ansible.builtin.apt:
-    name: metricbeat
+    name: "{{ item }}"
     state: present
     update_cache: true
     cache_valid_time: 3600
+  loop:
+  - metricbeat
+  - filebeat
 
-- name: Configure metricbeat
+- name: Start and enable metricbeat service
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+  - metricbeat
+  - filebeat
+
+- name: Configure metricbeat elastic parameter
   ansible.builtin.lineinfile:
-    path: /etc/metricbeat/metricbeat.yml
+    path: "/etc/{{ item }}/{{ item }}.yml"
     regexp: '^(.*)hosts:(.*)localhost:9200(.*)$'
     line: '\1hosts: [{{ elastic_nodes | join(", ") }}]'
     backrefs: true
-  notify: restart metricbeat
+  notify: "restart {{ item }}"
+  when: "'es-' not in ansible_hostname"
+  loop:
+  - metricbeat
+  - filebeat
 
-- name: Enable elasticsearch module
-  ansible.builtin.shell: "metricbeat modules enable {{ item }}"
-  loop: "{{metricbeat_modules}}"
-  changed_when: shelloutput.rc != 0
+- name: Configure metricbeat kibana parameter
+  ansible.builtin.lineinfile:
+    path: "/etc/{{ item }}/{{ item }}.yml"
+    regexp: '^(.*)#host:(.*)localhost:5601(.*)$'
+    line: '\1host: "{{__kibana_ips_list.stdout}}:5601"'
+    backrefs: true
+  notify: "restart {{ item }}"
+  when: "'kibana-' not in ansible_hostname"
+  loop:
+  - metricbeat
+  - filebeat
+
+
+- name: Configure Metricbeat
+  ansible.builtin.include_tasks: config_metricbeat.yml 
+
+- name: Configure Filebeat
+  ansible.builtin.include_tasks: config_filebeat.yml 
